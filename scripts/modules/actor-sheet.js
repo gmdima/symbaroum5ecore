@@ -338,6 +338,67 @@ export class SheetCommon {
 
 				SheetCommon._getCommonData(this.actor, context);
 
+    // Ensure initiative total is a number
+    if (context.system && context.system.attributes && context.system.attributes.init) {
+        context.system.attributes.init.total = parseFloat(context.system.attributes.init.total);
+        if (isNaN(context.system.attributes.init.total)) {
+            context.system.attributes.init.total = 0;
+        }
+    } else {
+        // Initialize if path doesn't exist
+        if (!context.system) context.system = {};
+        if (!context.system.attributes) context.system.attributes = {};
+        if (!context.system.attributes.init) context.system.attributes.init = {};
+        context.system.attributes.init.total = 0;
+    }
+
+    // Ensure ability modifiers and save values are numbers
+    if (context.abilities) {
+        for (const abilityId in context.abilities) {
+            if (context.abilities.hasOwnProperty(abilityId)) {
+                const ability = context.abilities[abilityId];
+                if (ability) {
+                    ability.mod = parseFloat(ability.mod);
+                    if (isNaN(ability.mod)) {
+                        ability.mod = 0;
+                    }
+                    if (ability.save) {
+                        ability.save.value = parseFloat(ability.save.value);
+                        if (isNaN(ability.save.value)) {
+                            ability.save.value = 0;
+                        }
+                    } else {
+                        // Initialize save object and value if it doesn't exist
+                        ability.save = { value: 0 };
+                    }
+                }
+            }
+        }
+    }
+
+    // Ensure skill totals are numbers
+    // Based on the template, skills are under context.skills directly from super.getData()
+    // or potentially context.system.skills if SheetCommon._getCommonData populates it there.
+    // Checking context.skills first as it's more direct from actor data.
+    let skillsObject = context.skills;
+    if (!skillsObject && context.system && context.system.skills) {
+        skillsObject = context.system.skills;
+    }
+
+    if (skillsObject) {
+        for (const skillId in skillsObject) {
+            if (skillsObject.hasOwnProperty(skillId)) {
+                const skill = skillsObject[skillId];
+                if (skill) {
+                    skill.total = parseFloat(skill.total);
+                    if (isNaN(skill.total)) {
+                        skill.total = 0;
+                    }
+                }
+            }
+        }
+    }
+
 				context.enrichedBio = await TextEditor.enrichHTML(context.system.details.biography.value, { async: true, rollData: context.rollData });
 				logger.debug('getData#context:', context);
 				return context;
