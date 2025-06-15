@@ -27,10 +27,11 @@ export class Syb5eItemSheet {
 		/* if this is an owned item, owner needs to be a SYB sheet actor
 		 * if this is an unowned item, show always
 		 */
-		if (item.parent && !item.parent.isSybActor()) {
-			logger.debug(`Item [${item.id}] with parent actor [${item.parent.id}] is not an SYB5E item`);
-			return;
-		}
+		// REMOVED FOR DEBUGGING: This check was commented out to always show corruption fields for testing.
+		// if (item.parent && !item.parent.isSybActor()) {
+		// 	logger.debug(`Item [${item.id}] with parent actor [${item.parent.id}] is not an SYB5E item`);
+		// 	return;
+		// }
 
 		/* only concerned with adding favored to sybactor owned spell type items */
 		// DND5E_COMPATIBILITY: Accessing item.type.
