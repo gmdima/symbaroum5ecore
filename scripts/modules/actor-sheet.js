@@ -453,24 +453,24 @@ export class SheetCommon {
 
 			async _onShortRest(event) {
 				event.preventDefault();
-				// await this._onSubmit(event);
-				return this.actor.shortRest({ dialog: false });
+				await this._onSubmit(event);
+				return this.actor.shortRest();
 			}
 
 			/* -------------------------------------------- */
 
 			async _onLongRest(event) {
 				event.preventDefault();
-				// await this._onSubmit(event);
-				return this.actor.longRest({ dialog: false });
+				await this._onSubmit(event);
+				return this.actor.longRest();
 			}
 
 			/* -------------------------------------------- */
 
 			async _onExtendedRest(event) {
 				event.preventDefault();
-				// await this._onSubmit(event);
-				return this.actor.extendedRest({ dialog: false });
+				await this._onSubmit(event);
+				return this.actor.extendedRest();
 			}
 
 			/* -------------------------------------------- */
