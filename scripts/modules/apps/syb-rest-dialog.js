@@ -21,14 +21,6 @@ export class SybRestDialog extends Dialog {
 
 		/* store our various rest options */
 		//this.options = {newDay, autoHD, autoHDThreshold};
-
-		/**
-		 * Grab stock dnd5e rest functions we want to re-use
-		 * @type {function}
-		 */
-		this._onRollHitDie = dnd5e.applications.actor.ShortRestDialog.prototype._onRollHitDie.bind(this);
-
-		this._getCoreData = dnd5e.applications.actor.ShortRestDialog.prototype.getData.bind(this);
 	}
 
 	/* -------------------------------------------- */
@@ -47,7 +39,7 @@ export class SybRestDialog extends Dialog {
 	activateListeners(html) {
 		super.activateListeners(html);
 		let healHp = html.find('#roll-hd');
-		healHp.click(this._onRollHitDie.bind(this));
+		healHp.click(this._onRollHitDieForHealing.bind(this));
 
 		let redCorr = html.find('#heal-corr');
 		redCorr.click(this._onReduceCorruption.bind(this));
@@ -57,55 +49,106 @@ export class SybRestDialog extends Dialog {
 
 	/** @override */
 	getData() {
-		/* leverage dnd5e functions */
-		const data = this._getCoreData();
+		const context = {
+		    user: game.user,
+		    actor: this.actor, // Provide the actor document to the template
+		    system: this.actor.system // Provide system data directly
+		}; // Basic context, similar to what Dialog.getData() might start with.
+		const actorSystem = this.actor.system;
 
+		// Prepare Hit Dice data (mimicking dnd5e ShortRestDialog's logic)
+		context.availableHD = {};
+		let canRoll = false;
+		let defaultDenom = this._denom; // User's last selected denomination
+
+		// Iterate over actor's classes to find available hit dice
+		if (this.actor.classes) {
+		    for (let [key, cls] of Object.entries(this.actor.classes)) {
+		        if (!cls || !cls.system) continue; // Ensure class and system data exist
+		        const d = cls.system;
+		        if (!d.hitDice) continue;
+		        const available = (d.levels || 0) - (d.hitDiceUsed || 0);
+		        context.availableHD[d.hitDice] = Math.max(0, available);
+		        if (available > 0) {
+		            canRoll = true;
+		            if (!defaultDenom) defaultDenom = d.hitDice;
+		        }
+		    }
+		}
+		context.canRoll = canRoll;
+		context.denomination = defaultDenom || "d6"; // Fallback denomination if none available/selected
+
+		// --- SybRestDialog specific data logic ---
 		const restTypes = game.syb5e.CONFIG.REST_TYPES;
-
-		data.restHint = {
+		context.restHint = {
 			[restTypes.short]: 'SYB5E.Rest.ShortHint',
 			[restTypes.long]: 'SYB5E.Rest.LongHint',
 			[restTypes.extended]: 'SYB5E.Rest.ExtendedHint',
 		}[this.type];
 
-		data.isExtended = this.type === restTypes.extended;
-		data.isShort = this.type === restTypes.short;
-		data.promptNewDay = this.type !== restTypes.short;
+		context.isExtended = this.type === restTypes.extended;
+		context.isShort = this.type === restTypes.short;
+		context.promptNewDay = this.type !== restTypes.short;
 
-		/* Rests can both roll HD for heal and corr AND
-		 * automatically recover upon completion. We need
-		 * to preview our totals so we dont have to do
-		 * mental math
-		 */
-		const actor5eData = this.actor.system;
 
 		const gain = Resting._restHpGain(this.actor, this.type);
-
-		const corruption = this.actor.corruption;
-
+		const corruption = this.actor.corruption; // Assuming actor.corruption is correctly populated
 		const corrRecovery = Resting._getCorruptionRecovery(this.actor, this.type);
 
-		data.preview = {
-			hp: actor5eData.attributes.hp.value + gain,
-			maxHp: actor5eData.attributes.hp.max,
-			tempCorr: Math.max(corruption.temp - corrRecovery, 0),
-			//totalCorr: Math.max(corruption.value - corrRecovery, 0),
-			maxCorr: corruption.max,
+		context.preview = {
+			hp: (actorSystem.attributes.hp.value || 0) + gain,
+			maxHp: actorSystem.attributes.hp.max || 0,
+			tempCorr: Math.max((corruption?.temp || 0) - corrRecovery, 0),
+			maxCorr: corruption?.max || 0,
 		};
 
-		/* clamp HP and corruption */
-		data.preview.totalCorr = data.preview.tempCorr + corruption.permanent;
-		data.preview.hp = Math.min(data.preview.hp, data.preview.maxHp);
+		context.preview.totalCorr = context.preview.tempCorr + (corruption?.permanent || 0);
+		context.preview.hp = Math.min(context.preview.hp, context.preview.maxHp);
 
-		return data;
+		// Pass config for localization of HD denominations if needed in template
+		context.config = { hitDiceTypes: CONFIG.DND5E.hitDiceTypes };
+
+
+		return context;
 	}
+
+	/* -------------------------------------------- */
+	async _onRollHitDieForHealing(event) {
+	    event.preventDefault();
+	    const denomination = event.currentTarget.form.hd.value;
+	    if (!denomination) return; // No denomination selected
+
+	    this._denom = denomination; // Store for re-rendering
+
+	    // Call the actor's rollHitDie method
+	    // This method should handle spending the HD, rolling, applying healing, and sending a chat message.
+	    await this.actor.rollHitDie(denomination, { suppressMessage: false });
+
+	    // Re-render the dialog to update available HD and HP
+	    this.render();
+	}
+
 	/* -------------------------------------------- */
 
 	async _onReduceCorruption(event) {
 		event.preventDefault();
 		const button = event.currentTarget;
-		this._denom = button.form.hd.value;
+		this._denom = button.form.hd.value; // Ensure a hit die is selected for corruption reduction
+		if (!this._denom) {
+		    ui.notifications.warn(game.i18n.localize("SYB5E.Notifications.NoHitDieSelectedForCorruption"));
+		    return;
+		}
+		// Check if actor has available HD of the selected type for corruption reduction
+		const classWithDenom = Object.values(this.actor.classes).find(cls => cls.system.hitDice === this._denom);
+		if (!classWithDenom || (classWithDenom.system.levels - classWithDenom.system.hitDiceUsed <= 0)) {
+		    ui.notifications.warn(game.i18n.format("SYB5E.Notifications.NoHitDiceRemaining", {denomination: this._denom}));
+		    return;
+		}
+
 		await Resting.corruptionHeal(this.actor, this.actor.system.attributes.prof);
+		// Resting.expendHitDie was intended to manually mark an HD as used.
+		// If rollHitDie (or a similar new method) is used, it might already do this.
+		// For now, assuming Resting.expendHitDie is the Symbaroum way to spend HD for corruption.
 		await Resting.expendHitDie(this.actor, this._denom);
 		this.render();
 	}
