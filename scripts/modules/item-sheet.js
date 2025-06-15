@@ -27,11 +27,12 @@ export class Syb5eItemSheet {
 		/* if this is an owned item, owner needs to be a SYB sheet actor
 		 * if this is an unowned item, show always
 		 */
-		// REMOVED FOR DEBUGGING: This check was commented out to always show corruption fields for testing.
-		// if (item.parent && !item.parent.isSybActor()) {
-		// 	logger.debug(`Item [${item.id}] with parent actor [${item.parent.id}] is not an SYB5E item`);
-		// 	return;
-		// }
+		// Re-enabled the check for SybActor ownership. If items not owned by Symbaroum actors
+		// still need corruption fields, this check would need to be re-evaluated.
+		if (item.parent && !item.parent.isSybActor()) {
+			logger.debug(`Item [${item.id}] with parent actor [${item.parent.id}] is not an SYB5E item`);
+			return;
+		}
 
 		/* only concerned with adding favored to sybactor owned spell type items */
 		// DND5E_COMPATIBILITY: Accessing item.type.
@@ -107,11 +108,14 @@ export class Syb5eItemSheet {
 			progressionSelect.children().not(filterList).remove();
 		}
 
-		/* we want to add a custom corruption field if there is a general resource consumption field */
-		// DND5E_SHEET_DOM: Targets '.form-group.consumption', dnd5e specific.
-		const consumeGroup = html.find('.form-group.consumption');
-		if (consumeGroup.length > 0) {
-			// Uses custom getter ItemSyb5e.corruptionOverride
+		/* We want to add a custom corruption field to the item details tab.
+		 * In D&D5e v4.0.0+, the sheet structure has changed.
+		 * We'll try to find a general content area within the 'details' tab.
+		 * Common elements include '.tab.details' or a more specific container within it.
+		 */
+		const itemDetailsTab = html.find('.tab[data-tab="details"]');
+
+		if (itemDetailsTab.length > 0) {
 			const currentOverrides = item.corruptionOverride;
 			let data = {
 				corruptionType: {
@@ -136,7 +140,27 @@ export class Syb5eItemSheet {
 			}
 
 			const corruptionGroup = await renderTemplate(`${COMMON.DATA.path}/templates/items/parts/item-corruption.html`, data);
-			consumeGroup.after(corruptionGroup);
+
+			// Attempt to find a suitable insertion point within the details tab.
+			// This might need adjustment based on the exact v4.0.0 HTML structure.
+			// A common section for item properties is often found within a '.form-section' or directly under a 'grid' layout.
+			// As a general fallback, we'll append to the `itemDetailsTab` directly.
+			let insertionPoint = itemDetailsTab.find('.item-properties'); // Try to find a section for properties
+            if (insertionPoint.length === 0) {
+                insertionPoint = itemDetailsTab.find('.properties-list'); // Another common properties list
+            }
+            if (insertionPoint.length === 0) {
+                insertionPoint = itemDetailsTab.find('.form-section.details'); // A general details section
+            }
+            if (insertionPoint.length === 0) {
+                insertionPoint = itemDetailsTab.find('.form-group-stacked:last'); // Last stacked form group
+            }
+            if (insertionPoint.length > 0) {
+                insertionPoint.after(corruptionGroup); // Insert after found point
+            } else {
+                itemDetailsTab.append(corruptionGroup); // Fallback: append to the end of the details tab
+            }
+
 		}
 	}
 }
